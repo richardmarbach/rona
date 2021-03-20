@@ -2,6 +2,11 @@ package rona
 
 import "time"
 
+// QuickTest constants
+const (
+	QuickTestValidityDuration = 24 * time.Hour
+)
+
 // QuickTest represents a quick test. The manufacturer enters the list
 // of unregistered tests. A test expires 24 hours after it is registered.
 type QuickTest struct {
@@ -13,10 +18,15 @@ type QuickTest struct {
 	Person string `json:"person,omitempty"`
 
 	CreatedAt    time.Time `json:"created_at"`
-	RegisteredAt time.Time `json:"registered_at"`
+	RegisteredAt time.Time `json:"registered_at,omitempty"`
 }
 
-// IsRegistered checked if the test has been registered
+// IsRegistered checks if the test has been registered
 func (qt *QuickTest) IsRegistered() bool {
 	return !qt.RegisteredAt.IsZero()
+}
+
+// IsExpired checks if the test has expired
+func (qt *QuickTest) IsExpired() bool {
+	return qt.IsRegistered() && time.Since(qt.RegisteredAt) > QuickTestValidityDuration
 }

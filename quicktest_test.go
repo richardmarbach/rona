@@ -33,3 +33,31 @@ func TestQuickTest_IsRegistered(t *testing.T) {
 		})
 	}
 }
+
+func TestQuickTest_IsExpired(t *testing.T) {
+	cases := []struct {
+		message   string
+		qt        *rona.QuickTest
+		isExpired bool
+	}{
+		{"expired", &rona.QuickTest{RegisteredAt: time.Now().Add(-rona.QuickTestValidityDuration - 1)}, true},
+		{"not yet expired", &rona.QuickTest{RegisteredAt: time.Now()}, false},
+		{"not yet registered", &rona.QuickTest{}, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.message, func(t *testing.T) {
+			isExpired := tc.qt.IsExpired()
+
+			if tc.isExpired {
+				if !isExpired {
+					t.Errorf("expected the quick test to be expired: %+v", tc.qt)
+				}
+			} else {
+				if isExpired {
+					t.Errorf("expected the quick test to not be expired: %+v", tc.qt)
+				}
+			}
+		})
+	}
+}
