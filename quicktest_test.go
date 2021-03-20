@@ -7,7 +7,7 @@ import (
 	"github.com/richardmarbach/rona"
 )
 
-func TestQuickTest_IsRegistered(t *testing.T) {
+func TestQuickTest_Registered(t *testing.T) {
 	cases := []struct {
 		message      string
 		qt           *rona.QuickTest
@@ -19,7 +19,7 @@ func TestQuickTest_IsRegistered(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.message, func(t *testing.T) {
-			isRegistered := tc.qt.IsRegistered()
+			isRegistered := tc.qt.Registered()
 
 			if tc.isRegistered {
 				if !isRegistered {
@@ -34,7 +34,7 @@ func TestQuickTest_IsRegistered(t *testing.T) {
 	}
 }
 
-func TestQuickTest_IsExpired(t *testing.T) {
+func TestQuickTest_ShouldExpire(t *testing.T) {
 	cases := []struct {
 		message   string
 		qt        *rona.QuickTest
@@ -47,7 +47,7 @@ func TestQuickTest_IsExpired(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.message, func(t *testing.T) {
-			isExpired := tc.qt.IsExpired()
+			isExpired := tc.qt.ShouldExpire()
 
 			if tc.isExpired {
 				if !isExpired {
