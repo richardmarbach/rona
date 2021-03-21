@@ -23,6 +23,9 @@ func TestQuickTestService_FindQuickTestByID(t *testing.T) {
 		if found.ID != quicktest.ID {
 			t.Errorf("want ID %v, got %v", quicktest.ID, found.ID)
 		}
+		if found.CreatedAt.IsZero() {
+			t.Errorf("expected CreatedAt to not be zero")
+		}
 	})
 
 	t.Run("no record found", func(t *testing.T) {
@@ -64,7 +67,6 @@ func TestQuickTestService_CreateQuickTest(t *testing.T) {
 	t.Run("inserting duplicate quicktest fails with ECONFLICT", func(t *testing.T) {
 		s := sqlite.NewQuickTestService(MustOpenDB(t))
 		ctx := context.Background()
-
 		quicktest := MustCreateQuickTest(ctx, t, s)
 
 		_, err := s.CreateQuickTest(ctx, quicktest.ID)
@@ -77,11 +79,91 @@ func TestQuickTestService_CreateQuickTest(t *testing.T) {
 	})
 }
 
+func TestQuickTest_Register(t *testing.T) {
+	t.Run("register a quick test", func(t *testing.T) {
+		s := sqlite.NewQuickTestService(MustOpenDB(t))
+		ctx := context.Background()
+		quicktest := MustCreateQuickTest(ctx, t, s)
+
+		registered, err := s.RegisterQuickTest(ctx, &rona.QuickTestRegister{
+			ID:     quicktest.ID,
+			Person: "Jimmy Hendricks",
+		})
+
+		if err != nil {
+			t.Fatal(err)
+		}
+		if registered == nil {
+			t.Fatal("expected a new QuickTest but didn't get one")
+		}
+		if registered.ID != quicktest.ID {
+			t.Errorf("want %s, got %s", quicktest.ID, registered.ID)
+		}
+		if registered.Person != "Jimmy Hendricks" {
+			t.Errorf("want %s, got %s", quicktest.Person, registered.Person)
+		}
+		if registered.RegisteredAt.IsZero() {
+			t.Errorf("expected RegisteredAt to be set")
+		}
+	})
+
+	t.Run("return ENOTFOUND when there is no such test", func(t *testing.T) {
+		s := sqlite.NewQuickTestService(MustOpenDB(t))
+		ctx := context.Background()
+
+		_, err := s.RegisterQuickTest(ctx, &rona.QuickTestRegister{
+			ID:     rona.NewQuickTestID(),
+			Person: "Jimmy Hendricks",
+		})
+
+		if err == nil {
+			t.Fatal("expected an error but didn't get one")
+		} else if rona.ErrorCode(err) != rona.ENOTFOUND {
+			t.Fatalf("expected ENOTFOUND but got %v", err)
+		}
+	})
+
+	t.Run("return ECONFLICT when the test is already registered", func(t *testing.T) {
+		s := sqlite.NewQuickTestService(MustOpenDB(t))
+		ctx := context.Background()
+		quicktest := MustCreatedRegisteredQuickTest(ctx, t, s, "Jimmy Hendricks")
+
+		_, err := s.RegisterQuickTest(ctx, &rona.QuickTestRegister{
+			ID:     quicktest.ID,
+			Person: "Jimmy Jones",
+		})
+
+		if err == nil {
+			t.Fatal("expected an error but didn't get one")
+		} else if rona.ErrorCode(err) != rona.ECONFLICT {
+			t.Fatalf("expected ECONFLICT but got %v", err)
+		}
+	})
+
+	t.Run("return EEXPIRED when the test has already expired", func(t *testing.T) {
+		t.Skip()
+	})
+}
+
 func MustCreateQuickTest(ctx context.Context, tb testing.TB, s *sqlite.QuickTestService) *rona.QuickTest {
 	tb.Helper()
 
 	id := rona.NewQuickTestID()
 	quicktest, err := s.CreateQuickTest(ctx, id)
+	if err != nil {
+		tb.Fatalf("unexpected error: %v", err)
+	}
+	return quicktest
+}
+
+func MustCreatedRegisteredQuickTest(ctx context.Context, tb testing.TB, s *sqlite.QuickTestService, person string) *rona.QuickTest {
+	tb.Helper()
+
+	quicktest := MustCreateQuickTest(ctx, tb, s)
+	quicktest, err := s.RegisterQuickTest(ctx, &rona.QuickTestRegister{
+		ID:     quicktest.ID,
+		Person: person,
+	})
 	if err != nil {
 		tb.Fatalf("unexpected error: %v", err)
 	}

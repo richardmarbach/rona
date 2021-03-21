@@ -73,6 +73,7 @@ type QuickTestService interface {
 
 	// CreateQuickTest creates a new QuickTest.
 	// Returns EINVALID if the QuickTest fails to validate.
+	// Return ECONFLICT if the QuickTest already exists.
 	CreateQuickTest(ctx context.Context, id QuickTestID) (*QuickTest, error)
 
 	// CreatManyQuickTests creates a batch of new QuickTests.

@@ -169,6 +169,7 @@ func (s *NullString) Scan(value interface{}) error {
 		return nil
 	} else if value, ok := value.(string); ok {
 		*(*string)(s) = value
+		return nil
 	}
 
 	return fmt.Errorf("NullString: cannot scan string: %v", s)
@@ -176,10 +177,10 @@ func (s *NullString) Scan(value interface{}) error {
 
 // Value formats the string for the database.
 func (s *NullString) Value() (driver.Value, error) {
-	if *s == "" {
+	if string(*s) == "" {
 		return nil, nil
 	}
-	return *s, nil
+	return string(*s), nil
 }
 
 // NullTime encodes time as an RFC3339 encoded string.
