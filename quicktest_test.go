@@ -1,11 +1,95 @@
 package rona_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/richardmarbach/rona"
 )
+
+func TestQuickTestID_Validate(t *testing.T) {
+	cases := []struct {
+		message string
+		id      rona.QuickTestID
+		isValid bool
+	}{
+		{"missing id", rona.QuickTestID(""), false},
+		{"invalid id", rona.QuickTestID("abcdef"), false},
+		{"valid id", rona.NewQuickTestID(), true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.message, func(t *testing.T) {
+			err := tc.id.Validate()
+
+			if tc.isValid {
+				if err != nil {
+					t.Errorf("expected id to be valid but got err %v", err)
+				}
+			} else {
+				if err == nil {
+					t.Error("expected an error but didn't get one")
+				} else if rona.ErrorCode(err) != rona.EINVALID {
+					t.Errorf("expected EINVALID but got %v", rona.ErrorCode(err))
+				}
+			}
+		})
+	}
+}
+
+func TestQuickTestRegister_Validate(t *testing.T) {
+	cases := []struct {
+		message string
+		reg     *rona.QuickTestRegister
+		isValid bool
+	}{
+		{
+			message: "missing id",
+			reg:     &rona.QuickTestRegister{},
+			isValid: false,
+		},
+		{
+			message: "invalid id",
+			reg:     &rona.QuickTestRegister{ID: "abc"},
+			isValid: false,
+		},
+		{
+			message: "missing person",
+			reg:     &rona.QuickTestRegister{ID: rona.NewQuickTestID()},
+			isValid: false,
+		},
+		{
+			message: "person too long",
+			reg:     &rona.QuickTestRegister{ID: rona.NewQuickTestID(), Person: strings.Repeat("a", rona.QuickTestMaxPersonLen+1)},
+			isValid: false,
+		},
+
+		{
+			message: "valid",
+			reg:     &rona.QuickTestRegister{ID: rona.NewQuickTestID(), Person: "Markus"},
+			isValid: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.message, func(t *testing.T) {
+			err := tc.reg.Validate()
+
+			if tc.isValid {
+				if err != nil {
+					t.Errorf("reg=%#v err=%v", tc.reg, err)
+				}
+			} else {
+				if err == nil {
+					t.Error("expected an error but didn't get one")
+				} else if rona.ErrorCode(err) != rona.EINVALID {
+					t.Errorf("expected EINVALID but got %v", rona.ErrorCode(err))
+				}
+			}
+		})
+	}
+}
 
 func TestQuickTest_Registered(t *testing.T) {
 	cases := []struct {

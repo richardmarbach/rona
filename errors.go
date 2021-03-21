@@ -40,3 +40,11 @@ func ErrorCode(err error) string {
 	}
 	return EINTERNAL
 }
+
+// Errorf creates a new formatted error for the given error code.
+func Errorf(code string, message string, args ...interface{}) *Error {
+	return &Error{
+		Code:    code,
+		Message: fmt.Sprintf(message, args...),
+	}
+}

@@ -3,15 +3,37 @@ package rona
 import (
 	"context"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // QuickTest constants
 const (
+	// Aparantly the offial record for the worlds longest first name is 1000
+	// characters long. Let's just multiply that by 4 and hope parents don't
+	// get it in their head that they need to break that record...
+	QuickTestMaxPersonLen     = 4000
 	QuickTestValidityDuration = 24 * time.Hour
 )
 
 // QuickTestID is a globally unique identifier for each quick test.
-type QuickTestID []byte
+type QuickTestID string
+
+// NewQuickTestID generates a new random quicktest ID.
+func NewQuickTestID() QuickTestID {
+	id := uuid.New()
+	return QuickTestID(id.String())
+}
+
+// Validate the ID
+func (id QuickTestID) Validate() error {
+	if id == "" {
+		return Errorf(EINVALID, "id is required")
+	} else if _, err := uuid.Parse(string(id)); err != nil {
+		return Errorf(EINVALID, "invalid id: %v", err)
+	}
+	return nil
+}
 
 // QuickTest represents a quick test. The manufacturer enters the list
 // of unregistered tests. A test expires 24 hours after it is registered.
@@ -43,9 +65,6 @@ type QuickTestService interface {
 	// Retrieve a QuickTest by ID.
 	FindQuickTestByID(ctx context.Context, id QuickTestID) (*QuickTest, error)
 
-	// FindQuickTests finds quick tests by the filter criteria.
-	FindQuickTests(ctx context.Context, filter *QuickTestFilter) ([]*QuickTest, error)
-
 	// RegisterQuickTest to a given Person.
 	// Returns ENOTFOUND if the quick test doesn't exist.
 	// Returns EINVALID if the quick test fails validation.
@@ -62,22 +81,25 @@ type QuickTestService interface {
 	// Returns EINVALID if any QuickTest fails to validate.
 	CreateManyQuickTests(ctx context.Context, ids []*QuickTestID) error
 
-	// ExpireQuickTest expires the QuickTest.
-	// If the quick test is already expired, no action is performed.
-	// Returns ENOTFOUND if the quick test does not exist.
-	ExpireQuickTestByID(ctx context.Context, id string) error
-}
-
-// QuickTestFilter represents the available filters
-type QuickTestFilter struct {
-	ID      *QuickTestID `json:"id"`
-	Expired *bool        `json:"expired"`
-
-	Limit int `json:"limit"`
+	// ExpireOutdatedQuickTests expires all quick tests older than the
+	// given duration.
+	ExpireOutdatedQuickTests(ctx context.Context, d time.Duration) error
 }
 
 // QuickTestRegister is the set of fields that are needed to register the test.
 type QuickTestRegister struct {
 	ID     QuickTestID
 	Person string
+}
+
+// Validate the fields required for registration.
+func (r *QuickTestRegister) Validate() error {
+	if err := r.ID.Validate(); err != nil {
+		return err
+	} else if r.Person == "" {
+		return Errorf(EINVALID, "name is required")
+	} else if len(r.Person) > QuickTestMaxPersonLen {
+		return Errorf(EINVALID, "name is too long")
+	}
+	return nil
 }
