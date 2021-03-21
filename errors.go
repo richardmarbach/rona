@@ -10,6 +10,7 @@ const (
 	EINTERNAL     = "internal"
 	EINVALID      = "invalid"
 	ENOTFOUND     = "not_found"
+	ECONFLICT     = "conflict"
 	EEXPIRED      = "expired"
 	EUNAUTHORIZED = "unauthorized"
 )

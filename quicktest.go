@@ -69,17 +69,17 @@ type QuickTestService interface {
 	// Returns ENOTFOUND if the quick test doesn't exist.
 	// Returns EINVALID if the quick test fails validation.
 	// Returns EEXPIRED if the quick test has expired.
-	RegisterQuickTest(ctx context.Context, reg *QuickTestRegister) error
+	RegisterQuickTest(ctx context.Context, reg *QuickTestRegister) (*QuickTest, error)
 
 	// CreateQuickTest creates a new QuickTest.
 	// Returns EINVALID if the QuickTest fails to validate.
-	CreateQuickTest(ctx context.Context, id QuickTestID) error
+	CreateQuickTest(ctx context.Context, id QuickTestID) (*QuickTest, error)
 
 	// CreatManyQuickTests creates a batch of new QuickTests.
 	//
 	// When validation fails, no QuickTests are created.
 	// Returns EINVALID if any QuickTest fails to validate.
-	CreateManyQuickTests(ctx context.Context, ids []*QuickTestID) error
+	CreateManyQuickTests(ctx context.Context, ids []*QuickTestID) ([]*QuickTest, error)
 
 	// ExpireOutdatedQuickTests expires all quick tests older than the
 	// given duration.
