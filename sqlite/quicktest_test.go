@@ -10,15 +10,12 @@ import (
 
 func TestQuickTestService_FindQuickTestByID(t *testing.T) {
 	t.Run("find record by id", func(t *testing.T) {
-		s := sqlite.NewQuickTestService(MustOpenDB(t))
-		ctx := context.Background()
+		ctx, s := createService(t)
 
 		quicktest := MustCreateQuickTest(ctx, t, s)
 
 		found, err := s.FindQuickTestByID(ctx, quicktest.ID)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		assertNoError(t, err)
 
 		if found.ID != quicktest.ID {
 			t.Errorf("want ID %v, got %v", quicktest.ID, found.ID)
@@ -29,32 +26,23 @@ func TestQuickTestService_FindQuickTestByID(t *testing.T) {
 	})
 
 	t.Run("no record found", func(t *testing.T) {
-		db := MustOpenDB(t)
-		s := sqlite.NewQuickTestService(db)
+		ctx, s := createService(t)
 
-		ctx := context.Background()
 		id := rona.NewQuickTestID()
 
-		quicktest, err := s.FindQuickTestByID(ctx, id)
-		if err == nil {
-			t.Errorf("expected an error but did not get one: %#v", quicktest)
-		} else if rona.ErrorCode(err) != rona.ENOTFOUND {
-			t.Errorf("expected ENOTFOUND, got %v", err)
-		}
+		_, err := s.FindQuickTestByID(ctx, id)
+		assertErrorCode(t, err, rona.ENOTFOUND)
 	})
 }
 
 func TestQuickTestService_CreateQuickTest(t *testing.T) {
 	t.Run("create quick test", func(t *testing.T) {
-		s := sqlite.NewQuickTestService(MustOpenDB(t))
-		ctx := context.Background()
+		ctx, s := createService(t)
 
 		id := rona.NewQuickTestID()
 
 		quicktest, err := s.CreateQuickTest(ctx, id)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		assertNoError(t, err)
 
 		if quicktest.ID != id {
 			t.Errorf("want id %v, got %v", id, quicktest.ID)
@@ -65,34 +53,107 @@ func TestQuickTestService_CreateQuickTest(t *testing.T) {
 	})
 
 	t.Run("inserting duplicate quicktest fails with ECONFLICT", func(t *testing.T) {
-		s := sqlite.NewQuickTestService(MustOpenDB(t))
-		ctx := context.Background()
+		ctx, s := createService(t)
 		quicktest := MustCreateQuickTest(ctx, t, s)
 
 		_, err := s.CreateQuickTest(ctx, quicktest.ID)
 
-		if err == nil {
-			t.Fatal("want an error but didn't get one")
-		} else if rona.ErrorCode(err) != rona.ECONFLICT {
-			t.Fatalf("want ECONFLICT, got %v", err)
-		}
+		assertErrorCode(t, err, rona.ECONFLICT)
 	})
 }
 
-func TestQuickTest_Register(t *testing.T) {
+func TestQuickTestService_CreateMany(t *testing.T) {
+	t.Run("create no quick tests", func(t *testing.T) {
+		ctx, s := createService(t)
+
+		ids := []rona.QuickTestID{}
+
+		quicktests, err := s.CreateManyQuickTests(ctx, ids)
+		assertNoError(t, err)
+		if len(quicktests) != 0 {
+			t.Errorf("expected 0 quicktest, got %d", len(quicktests))
+		}
+	})
+	t.Run("create one quick test", func(t *testing.T) {
+		ctx, s := createService(t)
+
+		ids := []rona.QuickTestID{
+			rona.NewQuickTestID(),
+		}
+
+		quicktests, err := s.CreateManyQuickTests(ctx, ids)
+		assertNoError(t, err)
+
+		if len(quicktests) != 1 {
+			t.Errorf("expected 1 quicktest, got %d", len(quicktests))
+		}
+	})
+
+	t.Run("create many quick tests", func(t *testing.T) {
+		ctx, s := createService(t)
+
+		ids := []rona.QuickTestID{
+			rona.NewQuickTestID(),
+			rona.NewQuickTestID(),
+			rona.NewQuickTestID(),
+			rona.NewQuickTestID(),
+		}
+
+		quicktests, err := s.CreateManyQuickTests(ctx, ids)
+		assertNoError(t, err)
+
+		for i, quicktest := range quicktests {
+			if quicktest.ID != ids[i] {
+				t.Errorf("[%d] wanted id %v, got %v", i, ids[i], quicktest.ID)
+			}
+
+			if quicktest.CreatedAt.IsZero() {
+				t.Errorf("[%d] expected CreatedAt to not be empty", i)
+			}
+		}
+	})
+
+	t.Run("fails with ECONFLICT if the quicktest already exists", func(t *testing.T) {
+		ctx, s := createService(t)
+
+		exists := MustCreateQuickTest(ctx, t, s)
+
+		ids := []rona.QuickTestID{
+			rona.NewQuickTestID(),
+			exists.ID,
+		}
+
+		_, err := s.CreateManyQuickTests(ctx, ids)
+		assertErrorCode(t, err, rona.ECONFLICT)
+
+		_, err = s.FindQuickTestByID(ctx, ids[0])
+		assertErrorCode(t, err, rona.ENOTFOUND)
+	})
+
+	t.Run("fails if any of the IDs fail validation", func(t *testing.T) {
+		ctx, s := createService(t)
+
+		ids := []rona.QuickTestID{
+			rona.NewQuickTestID(),
+			"abc",
+		}
+
+		_, err := s.CreateManyQuickTests(ctx, ids)
+		assertErrorCode(t, err, rona.EINVALID)
+	})
+}
+
+func TestQuickTestService_Register(t *testing.T) {
 	t.Run("register a quick test", func(t *testing.T) {
-		s := sqlite.NewQuickTestService(MustOpenDB(t))
-		ctx := context.Background()
+		ctx, s := createService(t)
 		quicktest := MustCreateQuickTest(ctx, t, s)
 
 		registered, err := s.RegisterQuickTest(ctx, &rona.QuickTestRegister{
 			ID:     quicktest.ID,
 			Person: "Jimmy Hendricks",
 		})
+		assertNoError(t, err)
 
-		if err != nil {
-			t.Fatal(err)
-		}
 		if registered == nil {
 			t.Fatal("expected a new QuickTest but didn't get one")
 		}
@@ -108,24 +169,18 @@ func TestQuickTest_Register(t *testing.T) {
 	})
 
 	t.Run("return ENOTFOUND when there is no such test", func(t *testing.T) {
-		s := sqlite.NewQuickTestService(MustOpenDB(t))
-		ctx := context.Background()
+		ctx, s := createService(t)
 
 		_, err := s.RegisterQuickTest(ctx, &rona.QuickTestRegister{
 			ID:     rona.NewQuickTestID(),
 			Person: "Jimmy Hendricks",
 		})
 
-		if err == nil {
-			t.Fatal("expected an error but didn't get one")
-		} else if rona.ErrorCode(err) != rona.ENOTFOUND {
-			t.Fatalf("expected ENOTFOUND but got %v", err)
-		}
+		assertErrorCode(t, err, rona.ENOTFOUND)
 	})
 
 	t.Run("return ECONFLICT when the test is already registered", func(t *testing.T) {
-		s := sqlite.NewQuickTestService(MustOpenDB(t))
-		ctx := context.Background()
+		ctx, s := createService(t)
 		quicktest := MustCreatedRegisteredQuickTest(ctx, t, s, "Jimmy Hendricks")
 
 		_, err := s.RegisterQuickTest(ctx, &rona.QuickTestRegister{
@@ -133,11 +188,7 @@ func TestQuickTest_Register(t *testing.T) {
 			Person: "Jimmy Jones",
 		})
 
-		if err == nil {
-			t.Fatal("expected an error but didn't get one")
-		} else if rona.ErrorCode(err) != rona.ECONFLICT {
-			t.Fatalf("expected ECONFLICT but got %v", err)
-		}
+		assertErrorCode(t, err, rona.ECONFLICT)
 	})
 
 	t.Run("return EEXPIRED when the test has already expired", func(t *testing.T) {
@@ -147,15 +198,11 @@ func TestQuickTest_Register(t *testing.T) {
 
 func TestQuickTestService_Expire(t *testing.T) {
 	t.Run("expire a test", func(t *testing.T) {
-		s := sqlite.NewQuickTestService(MustOpenDB(t))
-		ctx := context.Background()
+		ctx, s := createService(t)
 		quicktest := MustCreateQuickTest(ctx, t, s)
 
 		err := s.ExpireQuickTest(ctx, quicktest.ID)
-
-		if err != nil {
-			t.Fatal(err)
-		}
+		assertNoError(t, err)
 
 		quicktest = MustFindQuickTest(ctx, t, s, quicktest.ID)
 
@@ -169,16 +216,17 @@ func TestQuickTestService_Expire(t *testing.T) {
 	})
 
 	t.Run("return ENOTFOUND when quicktest doesn't exist", func(t *testing.T) {
-		s := sqlite.NewQuickTestService(MustOpenDB(t))
-		ctx := context.Background()
+		ctx, s := createService(t)
 		err := s.ExpireQuickTest(ctx, rona.NewQuickTestID())
 
-		if err == nil {
-			t.Errorf("expected an error but didn't get one")
-		} else if rona.ErrorCode(err) != rona.ENOTFOUND {
-			t.Errorf("expected ENOTFOUND, got %v", err)
-		}
+		assertErrorCode(t, err, rona.ENOTFOUND)
 	})
+}
+
+func createService(tb testing.TB) (context.Context, *sqlite.QuickTestService) {
+	tb.Helper()
+	s := sqlite.NewQuickTestService(MustOpenDB(tb))
+	return context.Background(), s
 }
 
 func MustFindQuickTest(
@@ -204,9 +252,8 @@ func MustCreateQuickTest(
 
 	id := rona.NewQuickTestID()
 	quicktest, err := s.CreateQuickTest(ctx, id)
-	if err != nil {
-		tb.Fatalf("unexpected error: %v", err)
-	}
+
+	assertNoError(tb, err)
 	return quicktest
 }
 
@@ -223,8 +270,23 @@ func MustCreatedRegisteredQuickTest(
 		ID:     quicktest.ID,
 		Person: person,
 	})
-	if err != nil {
-		tb.Fatalf("unexpected error: %v", err)
-	}
+	assertNoError(tb, err)
 	return quicktest
+}
+
+func assertNoError(tb testing.TB, err error) {
+	tb.Helper()
+	if err != nil {
+		tb.Fatalf("expected no error, got %v", err)
+	}
+}
+
+func assertErrorCode(tb testing.TB, err error, code string) {
+	tb.Helper()
+
+	if err == nil {
+		tb.Errorf("expected an error but didn't get one")
+	} else if rona.ErrorCode(err) != code {
+		tb.Errorf("expected %s, got %v", code, err)
+	}
 }

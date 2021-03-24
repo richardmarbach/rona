@@ -3,6 +3,8 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"fmt"
+	"strings"
 
 	"github.com/richardmarbach/rona"
 )
@@ -59,8 +61,27 @@ func (s *QuickTestService) FindQuickTestByID(ctx context.Context, id rona.QuickT
 
 // CreateQuickTest creates a new quicktest
 func (s *QuickTestService) CreateQuickTest(ctx context.Context, id rona.QuickTestID) (*rona.QuickTest, error) {
-	if err := id.Validate(); err != nil {
+	quicktests, err := s.CreateManyQuickTests(ctx, []rona.QuickTestID{id})
+	if err != nil {
 		return nil, err
+	}
+
+	if len(quicktests) != 1 {
+		return nil, rona.Errorf(rona.EINTERNAL, "expected quick test to be created, but wasn't")
+	}
+	return quicktests[0], nil
+}
+
+// CreateManyQuickTests creates quick tests in batches.
+func (s *QuickTestService) CreateManyQuickTests(ctx context.Context, ids []rona.QuickTestID) ([]*rona.QuickTest, error) {
+	for _, id := range ids {
+		if err := id.Validate(); err != nil {
+			return nil, err
+		}
+	}
+
+	if len(ids) == 0 {
+		return []*rona.QuickTest{}, nil
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -69,22 +90,33 @@ func (s *QuickTestService) CreateQuickTest(ctx context.Context, id rona.QuickTes
 	}
 	defer tx.Rollback()
 
-	quicktest := &rona.QuickTest{
-		ID:        id,
-		CreatedAt: tx.Now,
+	quicktests := make([]*rona.QuickTest, 0, len(ids))
+	for _, id := range ids {
+		quicktest := &rona.QuickTest{
+			ID:        id,
+			CreatedAt: tx.Now,
+		}
+		quicktests = append(quicktests, quicktest)
 	}
 
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO quick_tests (id, created_at) 
-		VALUES (?, ?);
-	`,
-		quicktest.ID,
-		(*NullTime)(&quicktest.CreatedAt),
+	valueStrings := make([]string, 0, len(quicktests))
+	valueArgs := make([]interface{}, 0, len(quicktests)*2)
+	for _, quicktest := range quicktests {
+		valueStrings = append(valueStrings, "(?, ?)")
+		valueArgs = append(valueArgs, quicktest.ID)
+		valueArgs = append(valueArgs, (*NullTime)(&quicktest.CreatedAt))
+	}
+
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
+		INSERT INTO quick_tests (id, created_at)
+		VALUES %s;
+		`, strings.Join(valueStrings, ",")),
+		valueArgs...,
 	); err != nil {
 		return nil, FormatError(err)
 	}
 
-	return quicktest, tx.Commit()
+	return quicktests, tx.Commit()
 }
 
 // RegisterQuickTest registers a new QuickTest

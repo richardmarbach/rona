@@ -80,7 +80,7 @@ type QuickTestService interface {
 	//
 	// When validation fails, no QuickTests are created.
 	// Returns EINVALID if any QuickTest fails to validate.
-	CreateManyQuickTests(ctx context.Context, ids []*QuickTestID) ([]*QuickTest, error)
+	CreateManyQuickTests(ctx context.Context, ids []QuickTestID) ([]*QuickTest, error)
 
 	// Expire a QuickTest
 	// Returns ENOTFOUND when the quick test doesn't exist.
