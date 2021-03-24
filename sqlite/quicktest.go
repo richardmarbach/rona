@@ -126,3 +126,40 @@ func (s *QuickTestService) RegisterQuickTest(ctx context.Context, reg *rona.Quic
 
 	return quicktest, tx.Commit()
 }
+
+// ExpireQuickTest by ID. An expired quicktest removes PII.
+func (s *QuickTestService) ExpireQuickTest(ctx context.Context, id rona.QuickTestID) error {
+	if err := id.Validate(); err != nil {
+		return err
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	res, err := tx.ExecContext(ctx, `
+		UPDATE quick_tests
+		SET expired = ?,
+			person = ?
+		WHERE id = ?
+	`,
+		true,
+		"",
+		id,
+	)
+	if err != nil {
+		return FormatError(err)
+	}
+
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return FormatError(err)
+	}
+	if rows != 1 {
+		return rona.Errorf(rona.ENOTFOUND, "quick test does not exist: %v", id)
+	}
+
+	return tx.Commit()
+}

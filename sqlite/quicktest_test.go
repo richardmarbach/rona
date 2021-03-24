@@ -145,7 +145,61 @@ func TestQuickTest_Register(t *testing.T) {
 	})
 }
 
-func MustCreateQuickTest(ctx context.Context, tb testing.TB, s *sqlite.QuickTestService) *rona.QuickTest {
+func TestQuickTestService_Expire(t *testing.T) {
+	t.Run("expire a test", func(t *testing.T) {
+		s := sqlite.NewQuickTestService(MustOpenDB(t))
+		ctx := context.Background()
+		quicktest := MustCreateQuickTest(ctx, t, s)
+
+		err := s.ExpireQuickTest(ctx, quicktest.ID)
+
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		quicktest = MustFindQuickTest(ctx, t, s, quicktest.ID)
+
+		if !quicktest.Expired {
+			t.Errorf("expected quicktest to be expired: %#v", quicktest)
+		}
+
+		if quicktest.Person != "" {
+			t.Errorf("expected quicktest Person to be unset: %v", quicktest.Person)
+		}
+	})
+
+	t.Run("return ENOTFOUND when quicktest doesn't exist", func(t *testing.T) {
+		s := sqlite.NewQuickTestService(MustOpenDB(t))
+		ctx := context.Background()
+		err := s.ExpireQuickTest(ctx, rona.NewQuickTestID())
+
+		if err == nil {
+			t.Errorf("expected an error but didn't get one")
+		} else if rona.ErrorCode(err) != rona.ENOTFOUND {
+			t.Errorf("expected ENOTFOUND, got %v", err)
+		}
+	})
+}
+
+func MustFindQuickTest(
+	ctx context.Context,
+	tb testing.TB,
+	s *sqlite.QuickTestService,
+	id rona.QuickTestID,
+) *rona.QuickTest {
+	tb.Helper()
+	quicktest, err := s.FindQuickTestByID(ctx, id)
+	if err != nil {
+		tb.Fatalf("failed to fetch quick test %v: %v", id, err)
+	}
+	return quicktest
+}
+
+func MustCreateQuickTest(
+	ctx context.Context,
+	tb testing.TB,
+	s *sqlite.QuickTestService,
+) *rona.QuickTest {
 	tb.Helper()
 
 	id := rona.NewQuickTestID()
@@ -156,7 +210,12 @@ func MustCreateQuickTest(ctx context.Context, tb testing.TB, s *sqlite.QuickTest
 	return quicktest
 }
 
-func MustCreatedRegisteredQuickTest(ctx context.Context, tb testing.TB, s *sqlite.QuickTestService, person string) *rona.QuickTest {
+func MustCreatedRegisteredQuickTest(
+	ctx context.Context,
+	tb testing.TB,
+	s *sqlite.QuickTestService,
+	person string,
+) *rona.QuickTest {
 	tb.Helper()
 
 	quicktest := MustCreateQuickTest(ctx, tb, s)

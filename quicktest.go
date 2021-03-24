@@ -82,6 +82,10 @@ type QuickTestService interface {
 	// Returns EINVALID if any QuickTest fails to validate.
 	CreateManyQuickTests(ctx context.Context, ids []*QuickTestID) ([]*QuickTest, error)
 
+	// Expire a QuickTest
+	// Returns ENOTFOUND when the quick test doesn't exist.
+	ExpireQuickTest(ctx context.Context, id QuickTestID) error
+
 	// ExpireOutdatedQuickTests expires all quick tests older than the
 	// given duration.
 	ExpireOutdatedQuickTests(ctx context.Context, d time.Duration) error
