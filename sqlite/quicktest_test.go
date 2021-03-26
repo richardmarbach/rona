@@ -192,7 +192,15 @@ func TestQuickTestService_Register(t *testing.T) {
 	})
 
 	t.Run("return EEXPIRED when the test has already expired", func(t *testing.T) {
-		t.Skip()
+		ctx, s := createService(t)
+		quicktest := MustCreateExpiredQuickTest(ctx, t, s)
+
+		_, err := s.RegisterQuickTest(ctx, &rona.QuickTestRegister{
+			ID:     quicktest.ID,
+			Person: "Jimmy Jones",
+		})
+
+		assertErrorCode(t, err, rona.EEXPIRED)
 	})
 }
 
@@ -272,6 +280,19 @@ func MustCreatedRegisteredQuickTest(
 	})
 	assertNoError(tb, err)
 	return quicktest
+}
+
+func MustCreateExpiredQuickTest(
+	ctx context.Context,
+	tb testing.TB,
+	s *sqlite.QuickTestService,
+) *rona.QuickTest {
+	tb.Helper()
+
+	quicktest := MustCreateQuickTest(ctx, tb, s)
+	err := s.ExpireQuickTest(ctx, quicktest.ID)
+	assertNoError(tb, err)
+	return MustFindQuickTest(ctx, tb, s, quicktest.ID)
 }
 
 func assertNoError(tb testing.TB, err error) {

@@ -138,6 +138,8 @@ func (s *QuickTestService) RegisterQuickTest(ctx context.Context, reg *rona.Quic
 
 	if quicktest.Registered() {
 		return nil, rona.Errorf(rona.ECONFLICT, "test has already been registered")
+	} else if quicktest.Expired {
+		return nil, rona.Errorf(rona.EEXPIRED, "test has already expired")
 	}
 
 	quicktest.Person = reg.Person
