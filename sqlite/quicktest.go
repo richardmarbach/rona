@@ -10,6 +10,8 @@ import (
 	"github.com/richardmarbach/rona"
 )
 
+var _ rona.QuickTestService = &QuickTestService{}
+
 // QuickTestService manages quick tests in the sqlite database.
 type QuickTestService struct {
 	db *DB
