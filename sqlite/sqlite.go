@@ -7,6 +7,7 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -15,7 +16,27 @@ import (
 
 	// Use sqlite driver
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/richardmarbach/rona"
+)
+
+// Database metrics
+var (
+	testCountGauge = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "rona_db_tests",
+		Help: "Total number of tests",
+	})
+
+	registeredCountGauge = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "rona_db_registered",
+		Help: "Number of registered tests",
+	})
+
+	availableCountGauge = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "rona_db_available",
+		Help: "Number of available tests",
+	})
 )
 
 //go:embed migrations/*.sql
@@ -66,6 +87,8 @@ func (db *DB) Open() (err error) {
 	if err := db.migrate(); err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
+
+	go db.monitor()
 
 	return nil
 }
@@ -142,6 +165,51 @@ func (db *DB) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
 		db:  db,
 		Now: Now(),
 	}, nil
+}
+
+// monitor gathers database metrics
+func (db *DB) monitor() {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-db.ctx.Done():
+			return
+		case <-ticker.C:
+		}
+
+		if err := db.updateStats(db.ctx); err != nil {
+			log.Printf("stats error: %v", err)
+		}
+	}
+}
+
+// updateStats updates the database metrics
+func (db *DB) updateStats(ctx context.Context) error {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var n int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM quick_tests;`).Scan(&n); err != nil {
+		return err
+	}
+	testCountGauge.Set(float64(n))
+
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM quick_tests WHERE expired = 0 AND registered_at IS NOT NULL;`).Scan(&n); err != nil {
+		return err
+	}
+	registeredCountGauge.Set(float64(n))
+
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM quick_tests WHERE expired = 0 AND registered_at IS NULL;`).Scan(&n); err != nil {
+		return err
+	}
+	availableCountGauge.Set(float64(n))
+
+	return nil
 }
 
 // Tx wraps sql.Tx and tracks transaction start time
