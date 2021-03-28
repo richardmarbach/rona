@@ -3,6 +3,7 @@ package sqlite_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/richardmarbach/rona"
 	"github.com/richardmarbach/rona/sqlite"
@@ -181,7 +182,7 @@ func TestQuickTestService_Register(t *testing.T) {
 
 	t.Run("return ECONFLICT when the test is already registered", func(t *testing.T) {
 		ctx, s := createService(t)
-		quicktest := MustCreatedRegisteredQuickTest(ctx, t, s, "Jimmy Hendricks")
+		quicktest := MustCreateRegisteredQuickTest(ctx, t, s, "Jimmy Hendricks")
 
 		_, err := s.RegisterQuickTest(ctx, &rona.QuickTestRegister{
 			ID:     quicktest.ID,
@@ -214,13 +215,7 @@ func TestQuickTestService_Expire(t *testing.T) {
 
 		quicktest = MustFindQuickTest(ctx, t, s, quicktest.ID)
 
-		if !quicktest.Expired {
-			t.Errorf("expected quicktest to be expired: %#v", quicktest)
-		}
-
-		if quicktest.Person != "" {
-			t.Errorf("expected quicktest Person to be unset: %v", quicktest.Person)
-		}
+		AssertScrubbed(t, quicktest)
 	})
 
 	t.Run("return ENOTFOUND when quicktest doesn't exist", func(t *testing.T) {
@@ -229,6 +224,87 @@ func TestQuickTestService_Expire(t *testing.T) {
 
 		assertErrorCode(t, err, rona.ENOTFOUND)
 	})
+}
+
+func TestQuickTestService_ExpireOutdatedQuickTests(t *testing.T) {
+	t.Run("expires outdated quicktest", func(t *testing.T) {
+		ctx, s := createService(t)
+
+		quicktest := MustCreateRegisteredQuickTestAt(ctx, t, s, "Tim", -25*time.Hour)
+
+		err := s.ExpireOutdatedQuickTests(ctx, 24*time.Hour)
+		assertNoError(t, err)
+
+		quicktest = MustFindQuickTest(ctx, t, s, quicktest.ID)
+
+		AssertScrubbed(t, quicktest)
+	})
+
+	t.Run("only expire quicktest older than the given duration", func(t *testing.T) {
+		ctx, s := createService(t)
+
+		outdatedTest := MustCreateRegisteredQuickTestAt(ctx, t, s, "Tim", -25*time.Hour)
+		validTest := MustCreateRegisteredQuickTestAt(ctx, t, s, "Jim", -23*time.Hour)
+
+		err := s.ExpireOutdatedQuickTests(ctx, 24*time.Hour)
+		assertNoError(t, err)
+
+		outdatedTest = MustFindQuickTest(ctx, t, s, outdatedTest.ID)
+		validTest = MustFindQuickTest(ctx, t, s, validTest.ID)
+
+		AssertScrubbed(t, outdatedTest)
+		AssertNotScrubbed(t, validTest)
+	})
+}
+
+func AssertNotScrubbed(tb testing.TB, quicktest *rona.QuickTest) {
+	tb.Helper()
+
+	if quicktest.Expired {
+		tb.Errorf("expected quicktest to not be expired: %v", quicktest)
+	}
+
+	if quicktest.Person == "" {
+		tb.Errorf("expected quicktest Person to be set: %v", quicktest.Person)
+	}
+}
+
+func AssertScrubbed(tb testing.TB, quicktest *rona.QuickTest) {
+	tb.Helper()
+
+	if !quicktest.Expired {
+		tb.Errorf("expected quicktest to be expired: %v", quicktest)
+	}
+
+	if quicktest.Person != "" {
+		tb.Errorf("expected quicktest Person to be unset: %v", quicktest.Person)
+	}
+}
+
+func MustCreateRegisteredQuickTestAt(
+	ctx context.Context,
+	tb testing.TB,
+	s *sqlite.QuickTestService,
+	person string,
+	d time.Duration,
+) *rona.QuickTest {
+	tb.Helper()
+
+	resetTime := atTime(tb, time.Now().Add(d))
+	defer resetTime()
+	return MustCreateRegisteredQuickTest(ctx, tb, s, person)
+}
+
+// atTime changes the time that transactions are run at.
+func atTime(tb testing.TB, currentTime time.Time) func() {
+	tb.Helper()
+
+	now := sqlite.Now
+	sqlite.Now = func() time.Time { return currentTime }
+
+	return func() {
+		sqlite.Now = now
+	}
 }
 
 func createService(tb testing.TB) (context.Context, *sqlite.QuickTestService) {
@@ -265,7 +341,7 @@ func MustCreateQuickTest(
 	return quicktest
 }
 
-func MustCreatedRegisteredQuickTest(
+func MustCreateRegisteredQuickTest(
 	ctx context.Context,
 	tb testing.TB,
 	s *sqlite.QuickTestService,

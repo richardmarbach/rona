@@ -21,6 +21,10 @@ import (
 //go:embed migrations/*.sql
 var migrationsFS embed.FS
 
+// Now wraps time.Now. This let's us set the transaction
+// time in testing.
+var Now = time.Now
+
 // DB represents a database connection.
 type DB struct {
 	db     *sql.DB
@@ -136,7 +140,7 @@ func (db *DB) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
 	return &Tx{
 		Tx:  tx,
 		db:  db,
-		Now: time.Now(),
+		Now: Now(),
 	}, nil
 }
 

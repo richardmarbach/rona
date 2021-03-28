@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/richardmarbach/rona"
 )
@@ -193,6 +194,33 @@ func (s *QuickTestService) ExpireQuickTest(ctx context.Context, id rona.QuickTes
 	}
 	if rows != 1 {
 		return rona.Errorf(rona.ENOTFOUND, "quick test does not exist: %v", id)
+	}
+
+	return tx.Commit()
+}
+
+// ExpireOutdatedQuickTests expires all quick tests registered after the given duration.
+func (s *QuickTestService) ExpireOutdatedQuickTests(ctx context.Context, d time.Duration) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE quick_tests
+		SET expired = ?,
+			person = ?
+		WHERE 
+			expired = 0 AND
+			registered_at IS NOT NULL AND
+			strftime('%s', registered_at) < strftime('%s', DATETIME('now', ?))
+	`,
+		true,
+		"",
+		fmt.Sprintf("-%d second", int64(d.Seconds())),
+	); err != nil {
+		return FormatError(err)
 	}
 
 	return tx.Commit()
