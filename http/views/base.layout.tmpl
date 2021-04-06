@@ -1,0 +1,19 @@
+{{define "base"}}
+<!doctype HTML>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chome=1">
+    <meta name="viewport" content="width=device=width">
+
+    <title>{{template "title" .}} - Corona Quick Test</title>
+  </head>
+  <body>
+    <main>
+      {{template "main" .}}
+    </main>
+
+    {{template "footer" .}}
+  </body>
+</html>
+{{end}}
